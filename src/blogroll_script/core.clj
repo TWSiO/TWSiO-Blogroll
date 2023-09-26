@@ -141,11 +141,10 @@
   [aggr post]
   (let [date (:date post)
         iso-format java.time.format.DateTimeFormatter/ISO_LOCAL_DATE
-        foo (println post)
         li (str
              "<li>"
              "<time datetime=\"" (.toString date) "\">" (.format date iso-format) "</time>"
-             "<h3><a href\"" (:link post) "\">" (:title post) "</a></h3"
+             "<h3><a href=\"" (:link post) "\">" (:title post) "</a></h3"
              "</li>"
              )
         ]
