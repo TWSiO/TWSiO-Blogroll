@@ -178,12 +178,13 @@
   [template [id {:keys [date link title]}]]
   (let [iso-format java.time.format.DateTimeFormatter/ISO_LOCAL_DATE
         newest-html (str
-                      "<article id=\"" (subs (name id) 1) "\">"
+                      ;"<article id=\"" (subs (name id) 1) "\">"
                       "<h4>Latest Post</h4>"
-                      "<h5><a href\"" link "\">" title "</a></h5"
+                      "<h5><a href=\"" link "\">" title "</a></h5>"
                       "<time datetime=\"" (.toString date) "\">" (.format date iso-format) "</time>"
-                      "</article>"
+                      ;"</article>"
                       )
+        foo (println newest-html)
         ]
   (html/at template [id] (html/html-content newest-html))))
 
@@ -193,12 +194,9 @@
         latest-feeds (feeds-latest feeds)
         match-id-post (fn [[site id]] [id (site latest-feeds)])
         id-post (map match-id-post keyword-id)
-        ;one (println "keyword-id" keyword-id)
-        ;two (println "latest-feeds" latest-feeds)
-        ;foo (println "blogroll-template" blogroll-template)
-        ;bar (println "id-post" id-post)
         template (reduce blogroll-reducer blogroll-template id-post)
         ]
+    (apply str (html/emit* template))
     ))
 
 (defn upload-home
@@ -228,7 +226,6 @@
         ]
     (println blogroll-html)
     (println home-html)
-    ;(println feeds)
     ))
 
 (defn -handler
