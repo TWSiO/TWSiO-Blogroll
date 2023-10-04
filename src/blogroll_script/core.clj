@@ -3,11 +3,11 @@
     :methods [^:static [handler [Object] String]]
     )
   (:require [clj-http.client :as http]
-            [clojure.data.xml :as xml]
             [clj-xpath.core :as xpath]
             [medley.core :as m]
             [net.cgrand.enlive-html :as html]
             [neocities-clj.core :as neo]
+            [cheshire.core :as json]
     ))
 
 (defn get-body
@@ -25,22 +25,28 @@
     [aws-token (System/getenv "AWS_SESSION_TOKEN")
      headers {"X-Aws-Parameters-Secrets-Token" aws-token}
      secrets-path (str "/secretsmanager/get?secretId=" secret-id)
+     possible-port (System/getenv "PARAMETERS_SECRETS_EXTENSION_HTTP_PORT")
+     port (if (nil? possible-port) 2773 possible-port)
      secrets-endpoint (str "http://localhost:"
-                           (System/getenv "PARAMETERS_SECRETS_EXTENSION_HTTP_PORT")
+                           port
                            secrets-path
                            )
+     body (as-> secrets-endpoint X
+            (http/get X {:headers headers})
+            (:body X))
+     parsed (json/parse-string body true)
      ]
-     (as-> secrets-endpoint X
-       (http/get X {:headers headers})
-       (:body X)
-    )))
+    (:SecretString parsed)
+     ))
 
 (defn parse-atom-entry
   [entry]
   (let [subtags @(:children entry)
-        subtag-get (fn [tag-name subtag] (as-> subtag X
-               (filter #(= tag-name (:tag %)) X)
-               (first X)))
+        subtag-get (fn [tag-name subtag]
+                     (as-> subtag X
+                       (filter #(= tag-name (:tag %)) X)
+                       (first X)))
+
         subtag-text #(:text (subtag-get %1 %2))
         dt-format java.time.format.DateTimeFormatter/ISO_OFFSET_DATE_TIME
 
@@ -52,7 +58,7 @@
      :link (:href (:attrs (subtag-get :link subtags)))
      :title (subtag-text :title subtags)
      }
-   ))
+    ))
 
 (defn parse-atom
   [atom-string]
@@ -109,12 +115,21 @@
    :computer-things (computer-things)
    })
 
+(defn pair-up-reducer
+  [aggr [site posts]]
+  (into
+    aggr
+    (map (fn [post] [site post]) posts)))
+
 (defn combined-feeds
   [feeds]
-  (let [feeds (vals feeds)
-        everything (flatten feeds)
+  (let [everything (reduce pair-up-reducer [] feeds)
+        comparer (fn [left right] (- (compare left right)))
         ]
-    (sort-by :date #(- (compare %1 %2)) everything)
+    (sort-by
+      (fn [[_ post]] (:date post))
+      comparer
+      everything)
     )
   )
 
@@ -137,14 +152,21 @@
   (get-body twsio-blogroll)
   )
 
+(def site-names
+  {:jvns {:name "Julia Evans" :url "https://jvns.ca/"}
+   :computer-things {:name "Hillel Wayne" :url "https://buttondown.email/hillelwayne/"}
+   })
+
 (defn latest-feeds-html-reducer
-  [aggr post]
+  [aggr [site-id post]]
   (let [date (:date post)
         iso-format java.time.format.DateTimeFormatter/ISO_LOCAL_DATE
+        site-info (site-id site-names)
         li (str
              "<li>"
+             "<h3><a href=\"" (:url site-info) "\">" (:name site-info) "</a></h3>"
              "<time datetime=\"" (.toString date) "\">" (.format date iso-format) "</time>"
-             "<h3><a href=\"" (:link post) "\">" (:title post) "</a></h3"
+             "<h4><a href=\"" (:link post) "\">" (:title post) "</a></h4>"
              "</li>"
              )
         ]
@@ -154,9 +176,7 @@
 (defn latest-feeds-html
   [posts]
   (str
-    "<ol class=\"blogroll-feed\">"
     (reduce latest-feeds-html-reducer "" posts)
-    "</ol>"
     ))
 
 (defn home-feeds
@@ -178,13 +198,10 @@
   [template [id {:keys [date link title]}]]
   (let [iso-format java.time.format.DateTimeFormatter/ISO_LOCAL_DATE
         newest-html (str
-                      ;"<article id=\"" (subs (name id) 1) "\">"
-                      "<h4>Latest Post</h4>"
-                      "<h5><a href=\"" link "\">" title "</a></h5>"
+                      "<h3>Latest Post</h3>"
                       "<time datetime=\"" (.toString date) "\">" (.format date iso-format) "</time>"
-                      ;"</article>"
+                      "<h4><a href=\"" link "\">" title "</a></h4>"
                       )
-        foo (println newest-html)
         ]
   (html/at template [id] (html/html-content newest-html))))
 
@@ -203,17 +220,15 @@
   [html api-key]
   (spit "/tmp/home.html" html)
   (neo/upload
-    {"/index.html" "/tml/home.html"}
-    {:api-key api-key})
-  )
+    {"/index.html" "/tmp/home.html"}
+    :api-key api-key))
 
 (defn upload-blogroll
   [html api-key]
   (spit "/tmp/blogroll.html" html)
   (neo/upload
     {"/sites-i-follow.html" "/tmp/blogroll.html"}
-    {:api-key api-key})
-  )
+    :api-key api-key))
 
 (defn -main
   "For running with the static site generator."
@@ -226,24 +241,23 @@
         ]
     (println blogroll-html)
     (println home-html)
+    (neo/upload
+      {"/test.txt" "/tmp/test.txt"}
+      :api-key "956487786cd7b3584d32f782210e99c0")
     ))
 
 (defn -handler
   [s]
   (let
-    [;api-key (get-api-key)
+    [api-key (get-api-key)
      feeds (all-feeds)
      pre-home-html (get-home)
      home-html (home-feeds pre-home-html feeds)
      pre-blogroll-html (get-blogroll)
      blogroll-html (blogroll-feeds pre-blogroll-html feeds)
      ]
-    (str "Test: \n"
-         blogroll-html
-         "\n###\n"
-         home-html)
-    ;(println blogroll-html)
-    ;(println home-html)
-    ;(upload-home home-html api-key)
-    ;(upload-blogroll blogroll-html api-key)
+
+    (upload-home home-html api-key)
+    (upload-blogroll blogroll-html api-key)
+    "Finished"
     ))

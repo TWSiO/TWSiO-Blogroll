@@ -5,7 +5,6 @@
             :url "https://www.gnu.org/licenses/agpl-3.0.html"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [clj-http "3.12.3"]
-                 [org.clojure/data.xml "0.0.8"]
                  [com.github.kyleburton/clj-xpath "1.4.13"]
                  [dev.weavejester/medley "1.7.0"]
                  [enlive "1.1.6"]
