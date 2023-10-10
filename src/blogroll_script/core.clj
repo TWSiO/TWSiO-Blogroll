@@ -238,12 +238,10 @@
         home-html (home-feeds pre-home-html feeds)
         pre-blogroll-html (get-blogroll)
         blogroll-html (blogroll-feeds pre-blogroll-html feeds)
+        api-key (slurp "api-key.txt") ; I've rotated the api-key.
         ]
-    (println blogroll-html)
-    (println home-html)
-    (neo/upload
-      {"/test.txt" "/tmp/test.txt"}
-      :api-key "956487786cd7b3584d32f782210e99c0")
+    (upload-home home-html api-key)
+    (upload-blogroll blogroll-html api-key)
     ))
 
 (defn -handler
